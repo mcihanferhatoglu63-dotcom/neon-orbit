@@ -1,7 +1,6 @@
-import React, { useEffect, useRef, useState, useCallback } from "react";
-import { Play, RotateCcw, Trophy, Volume2, VolumeX, Zap } from "lucide-react";
+import React, { useEffect, useRef, useState, useCallback } from 'react';
+import { Play, RotateCcw, Trophy, Volume2, VolumeX, Zap } from 'lucide-react';
 
-// Harici dosya gerektirmeyen sentezlenmiş ses efektleri
 const playSound = (type, muted) => {
   if (muted) return;
   try {
@@ -12,30 +11,29 @@ const playSound = (type, muted) => {
     gain.connect(ctx.destination);
 
     const now = ctx.currentTime;
-    if (type === "switch") {
-      osc.type = "sine";
+    if (type === 'switch') {
+      osc.type = 'sine';
       osc.frequency.setValueAtTime(320, now);
       osc.frequency.exponentialRampToValueAtTime(640, now + 0.08);
       gain.gain.setValueAtTime(0.15, now);
       gain.gain.exponentialRampToValueAtTime(0.01, now + 0.08);
       osc.start(now);
       osc.stop(now + 0.08);
-    } else if (type === "score") {
-      osc.type = "triangle";
+    } else if (type === 'score') {
+      osc.type = 'triangle';
       osc.frequency.setValueAtTime(580, now);
       osc.frequency.exponentialRampToValueAtTime(980, now + 0.12);
       gain.gain.setValueAtTime(0.2, now);
       gain.gain.exponentialRampToValueAtTime(0.01, now + 0.12);
       osc.start(now);
       osc.stop(now + 0.12);
-    } else if (type === "crash") {
-      // 1. Tok darbe / sub-bass düşüşü
+    } else if (type === 'crash') {
       const subOsc = ctx.createOscillator();
       const subGain = ctx.createGain();
       subOsc.connect(subGain);
       subGain.connect(ctx.destination);
 
-      subOsc.type = "triangle";
+      subOsc.type = 'triangle';
       subOsc.frequency.setValueAtTime(190, now);
       subOsc.frequency.exponentialRampToValueAtTime(34, now + 0.32);
 
@@ -45,20 +43,18 @@ const playSound = (type, muted) => {
       subOsc.start(now);
       subOsc.stop(now + 0.35);
 
-      // 2. Kısa kıvılcım / kırılma gürültüsü (white noise burst)
       const bufferSize = Math.floor(ctx.sampleRate * 0.22);
       const noiseBuffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
       const output = noiseBuffer.getChannelData(0);
       for (let i = 0; i < bufferSize; i++) {
-        output[i] =
-          (Math.random() * 2 - 1) * Math.exp(-i / (bufferSize * 0.35));
+        output[i] = (Math.random() * 2 - 1) * Math.exp(-i / (bufferSize * 0.35));
       }
 
       const whiteNoise = ctx.createBufferSource();
       whiteNoise.buffer = noiseBuffer;
 
       const filter = ctx.createBiquadFilter();
-      filter.type = "bandpass";
+      filter.type = 'bandpass';
       filter.frequency.setValueAtTime(950, now);
       filter.Q.setValueAtTime(1.2, now);
 
@@ -74,25 +70,24 @@ const playSound = (type, muted) => {
       whiteNoise.stop(now + 0.22);
     }
   } catch (e) {
-    // Tarayıcı ses kısıtlaması durumunda sessiz devam et
+    // Ses bağlamı engellenirse sessiz devam et
   }
 };
 
 export default function App() {
   const canvasRef = useRef(null);
-  const [gameState, setGameState] = useState("START"); // START, PLAYING, GAMEOVER
+  const [gameState, setGameState] = useState('START');
   const [score, setScore] = useState(0);
   const [combo, setCombo] = useState(1);
   const [highScore, setHighScore] = useState(() => {
-    return parseInt(localStorage.getItem("neon_orbit_highscore") || "0", 10);
+    return parseInt(localStorage.getItem('neon_orbit_highscore') || '0', 10);
   });
   const [muted, setMuted] = useState(false);
 
-  // Oyun içi anlık değişkenler (Render döngüsünü bozmamak için ref)
   const gameRef = useRef({
     angle: 0,
     isOuter: true,
-    speed: 0.032,
+    speed: 0.013,
     obstacles: [],
     orbs: [],
     particles: [],
@@ -122,7 +117,6 @@ export default function App() {
 
   const spawnEntities = (baseAngle) => {
     const g = gameRef.current;
-    // Bir sonraki engelin açısı
     const offset = 1.45 + Math.random() * 0.7;
     const obsAngle = baseAngle + offset;
     const obsOuter = Math.random() > 0.5;
@@ -133,7 +127,6 @@ export default function App() {
       passed: false,
     });
 
-    // Engelin ters yörüngesine veya biraz ilerisine enerji küresi koy
     if (Math.random() > 0.25) {
       g.orbs.push({
         angle: obsAngle + (Math.random() > 0.5 ? 0 : 0.35),
@@ -164,52 +157,44 @@ export default function App() {
 
     setScore(0);
     setCombo(1);
-    setGameState("PLAYING");
-    playSound("switch", muted);
+    setGameState('PLAYING');
+    playSound('switch', muted);
   }, [muted]);
 
   const handleTap = useCallback(() => {
-    if (gameState !== "PLAYING") return;
+    if (gameState !== 'PLAYING') return;
     gameRef.current.isOuter = !gameRef.current.isOuter;
-    playSound("switch", muted);
+    playSound('switch', muted);
   }, [gameState, muted]);
 
-  // Klavye desteği (Boşluk veya Yukarı/Aşağı ok)
   useEffect(() => {
     const onKeyDown = (e) => {
-      if (
-        e.code === "Space" ||
-        e.code === "ArrowUp" ||
-        e.code === "ArrowDown"
-      ) {
+      if (e.code === 'Space' || e.code === 'ArrowUp' || e.code === 'ArrowDown') {
         e.preventDefault();
-        if (gameState === "PLAYING") handleTap();
+        if (gameState === 'PLAYING') handleTap();
         else startGame();
       }
     };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
   }, [gameState, handleTap, startGame]);
 
-  // Ana Oyun Döngüsü (Canvas)
   useEffect(() => {
     const canvas = canvasRef.current;
-    const ctx = canvas.getContext("2d");
-    let animId;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
 
-    // Başlangıç: 0.013 | Puan arttıkça kademeli hızlanır | Üst sınır: 0.062
-    const dynamicSpeed =
-      0.013 + Math.min(0.049, Math.pow(g.score, 0.85) * 0.00075);
-    g.speed = dynamicSpeed;
+    let animId;
 
     const resize = () => {
       const dpr = window.devicePixelRatio || 1;
       canvas.width = window.innerWidth * dpr;
       canvas.height = window.innerHeight * dpr;
-      ctx.scale(dpr, dpr);
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     };
     resize();
-    window.addEventListener("resize", resize);
+    window.addEventListener('resize', resize);
 
     const render = () => {
       const w = window.innerWidth;
@@ -225,55 +210,47 @@ export default function App() {
       const g = gameRef.current;
       g.hueShift = (g.hueShift + 0.2) % 360;
 
-      // Arka plan temizleme & Aurora parlama
-      ctx.fillStyle = "#050814";
+      ctx.fillStyle = '#050814';
       ctx.fillRect(0, 0, w, h);
 
       const bgGrad = ctx.createRadialGradient(cx, cy, 10, cx, cy, outerR * 1.6);
       bgGrad.addColorStop(0, `hsla(${g.hueShift}, 85%, 20%, 0.35)`);
-      bgGrad.addColorStop(0.5, "rgba(6, 182, 212, 0.08)");
-      bgGrad.addColorStop(1, "rgba(5, 8, 20, 0)");
+      bgGrad.addColorStop(0.5, 'rgba(6, 182, 212, 0.08)');
+      bgGrad.addColorStop(1, 'rgba(5, 8, 20, 0)');
       ctx.fillStyle = bgGrad;
       ctx.fillRect(0, 0, w, h);
 
       ctx.save();
       if (g.shake > 0) {
-        ctx.translate(
-          (Math.random() - 0.5) * g.shake,
-          (Math.random() - 0.5) * g.shake,
-        );
+        ctx.translate((Math.random() - 0.5) * g.shake, (Math.random() - 0.5) * g.shake);
         g.shake *= 0.88;
         if (g.shake < 0.5) g.shake = 0;
       }
 
-      // Yörünge halkalarını çiz
       [outerR, innerR].forEach((r, idx) => {
         ctx.beginPath();
         ctx.arc(cx, cy, r, 0, Math.PI * 2);
-        ctx.strokeStyle =
-          idx === 0 ? "rgba(34, 211, 238, 0.25)" : "rgba(250, 204, 21, 0.22)";
+        ctx.strokeStyle = idx === 0 ? 'rgba(34, 211, 238, 0.25)' : 'rgba(250, 204, 21, 0.22)';
         ctx.lineWidth = 2;
         ctx.setLineDash([8, 8]);
         ctx.stroke();
         ctx.setLineDash([]);
       });
 
-      // Merkez enerji çekirdeği
       const coreGrad = ctx.createRadialGradient(cx, cy, 2, cx, cy, coreR);
-      coreGrad.addColorStop(0, "#fef08a");
-      coreGrad.addColorStop(0.5, "#06b6d4");
-      coreGrad.addColorStop(1, "rgba(6, 182, 212, 0)");
+      coreGrad.addColorStop(0, '#fef08a');
+      coreGrad.addColorStop(0.5, '#06b6d4');
+      coreGrad.addColorStop(1, 'rgba(6, 182, 212, 0)');
       ctx.beginPath();
       ctx.arc(cx, cy, coreR, 0, Math.PI * 2);
       ctx.fillStyle = coreGrad;
       ctx.fill();
 
-      if (gameState === "PLAYING") {
+      if (gameState === 'PLAYING') {
+        const dynamicSpeed = 0.013 + Math.min(0.049, Math.pow(g.score, 0.85) * 0.00075);
+        g.speed = dynamicSpeed;
         g.angle += g.speed;
-        // Hız kademeli olarak artar
-        g.speed = Math.min(0.046, 0.021 + g.score * 0.00014);
 
-        // Yeni engeller üret
         while (g.lastSpawnAngle < g.angle + Math.PI * 2) {
           spawnEntities(g.lastSpawnAngle);
         }
@@ -283,8 +260,7 @@ export default function App() {
       const px = cx + Math.cos(g.angle) * playerR;
       const py = cy + Math.sin(g.angle) * playerR;
 
-      // Oyuncu izi (Trail)
-      if (gameState === "PLAYING") {
+      if (gameState === 'PLAYING') {
         g.trail.push({ x: px, y: py });
         if (g.trail.length > 14) g.trail.shift();
       }
@@ -296,24 +272,21 @@ export default function App() {
         ctx.fill();
       });
 
-      // Enerji Küreleri (Puan)
       g.orbs.forEach((orb) => {
         if (orb.collected) return;
         const r = orb.isOuter ? outerR : innerR;
         const ox = cx + Math.cos(orb.angle) * r;
         const oy = cy + Math.sin(orb.angle) * r;
 
-        // Çizim
         ctx.beginPath();
         ctx.arc(ox, oy, 8, 0, Math.PI * 2);
-        ctx.fillStyle = "#facc15";
-        ctx.shadowColor = "#facc15";
+        ctx.fillStyle = '#facc15';
+        ctx.shadowColor = '#facc15';
         ctx.shadowBlur = 14;
         ctx.fill();
         ctx.shadowBlur = 0;
 
-        // Toplama kontrolü
-        if (gameState === "PLAYING") {
+        if (gameState === 'PLAYING') {
           const dist = Math.hypot(px - ox, py - oy);
           if (dist < 22) {
             orb.collected = true;
@@ -321,13 +294,12 @@ export default function App() {
             g.score += 10 * g.combo;
             setScore(g.score);
             setCombo(g.combo);
-            playSound("score", muted);
-            createParticles(ox, oy, "#facc15", 12);
+            playSound('score', muted);
+            createParticles(ox, oy, '#facc15', 12);
           }
         }
       });
 
-      // Engeller (Kırmızı/Turuncu Plazma Blokları)
       g.obstacles.forEach((obs) => {
         const r = obs.isOuter ? outerR : innerR;
         const ex = cx + Math.cos(obs.angle) * r;
@@ -336,59 +308,54 @@ export default function App() {
         ctx.save();
         ctx.translate(ex, ey);
         ctx.rotate(obs.angle);
-        ctx.fillStyle = "#fb923c";
-        ctx.shadowColor = "#f97316";
+        ctx.fillStyle = '#fb923c';
+        ctx.shadowColor = '#f97316';
         ctx.shadowBlur = 16;
         ctx.beginPath();
         ctx.roundRect(-9, -14, 18, 28, 6);
         ctx.fill();
         ctx.restore();
 
-        if (gameState === "PLAYING") {
-          // Engeli başarıyla geçince +1 puan
+        if (gameState === 'PLAYING') {
           if (!obs.passed && obs.angle < g.angle - 0.15) {
             obs.passed = true;
             g.score += 1;
             setScore(g.score);
           }
 
-          // Çarpışma kontrolü
           const dist = Math.hypot(px - ex, py - ey);
           if (dist < 19) {
             g.shake = 18;
-            playSound("crash", muted);
-            createParticles(px, py, "#fb923c", 28);
-            setGameState("GAMEOVER");
+            playSound('crash', muted);
+            createParticles(px, py, '#fb923c', 28);
+            setGameState('GAMEOVER');
             setHighScore((prev) => {
               const best = Math.max(prev, g.score);
-              localStorage.setItem("neon_orbit_highscore", best.toString());
+              localStorage.setItem('neon_orbit_highscore', best.toString());
               return best;
             });
           }
         }
       });
 
-      // Eski nesneleri temizle
       g.obstacles = g.obstacles.filter((o) => o.angle > g.angle - 1.5);
       g.orbs = g.orbs.filter((o) => !o.collected && o.angle > g.angle - 1.5);
 
-      // Oyuncu Küresi
-      if (gameState !== "GAMEOVER") {
+      if (gameState !== 'GAMEOVER') {
         ctx.beginPath();
         ctx.arc(px, py, 11, 0, Math.PI * 2);
-        ctx.fillStyle = "#22d3ee";
-        ctx.shadowColor = "#22d3ee";
+        ctx.fillStyle = '#22d3ee';
+        ctx.shadowColor = '#22d3ee';
         ctx.shadowBlur = 20;
         ctx.fill();
         ctx.shadowBlur = 0;
 
         ctx.beginPath();
         ctx.arc(px, py, 5, 0, Math.PI * 2);
-        ctx.fillStyle = "#ffffff";
+        ctx.fillStyle = '#ffffff';
         ctx.fill();
       }
 
-      // Parçacık efektleri
       g.particles.forEach((p) => {
         p.x += p.vx;
         p.y += p.vy;
@@ -411,7 +378,7 @@ export default function App() {
     animId = requestAnimationFrame(render);
     return () => {
       cancelAnimationFrame(animId);
-      window.removeEventListener("resize", resize);
+      window.removeEventListener('resize', resize);
     };
   }, [gameState, muted]);
 
@@ -422,14 +389,13 @@ export default function App() {
     >
       <canvas ref={canvasRef} className="block w-full h-full" />
 
-      {/* Üst Bilgi Çubuğu */}
       <div className="absolute top-0 left-0 right-0 p-5 flex items-center justify-between pointer-events-none">
         <div className="flex items-center gap-2 bg-slate-900/70 backdrop-blur-md border border-cyan-500/30 px-4 py-2 rounded-2xl">
           <Trophy className="w-5 h-5 text-yellow-400" />
           <span className="text-yellow-300 font-bold text-lg">{highScore}</span>
         </div>
 
-        {gameState === "PLAYING" && (
+        {gameState === 'PLAYING' && (
           <div className="flex flex-col items-center">
             <span className="text-4xl font-black text-white tracking-wider drop-shadow-[0_0_12px_rgba(34,211,238,0.8)]">
               {score}
@@ -449,16 +415,11 @@ export default function App() {
           }}
           className="pointer-events-auto bg-slate-900/70 backdrop-blur-md border border-cyan-500/30 p-3 rounded-2xl text-cyan-300 active:scale-95 transition"
         >
-          {muted ? (
-            <VolumeX className="w-5 h-5" />
-          ) : (
-            <Volume2 className="w-5 h-5" />
-          )}
+          {muted ? <VolumeX className="w-5 h-5" /> : <Volume2 className="w-5 h-5" />}
         </button>
       </div>
 
-      {/* Başlangıç Ekranı */}
-      {gameState === "START" && (
+      {gameState === 'START' && (
         <div
           onPointerDown={(e) => e.stopPropagation()}
           className="absolute inset-0 flex flex-col items-center justify-center bg-slate-950/65 backdrop-blur-sm p-6 text-center"
@@ -470,8 +431,7 @@ export default function App() {
             NEON ORBIT
           </h1>
           <p className="text-slate-300 max-w-xs text-sm mb-8 leading-relaxed">
-            Ekrana dokunarak iç ve dış yörünge arasında geçiş yap. Turuncu
-            engellerden kaç, altın küreleri topla!
+            Ekrana dokunarak iç ve dış yörünge arasında geçiş yap. Turuncu engellerden kaç, altın küreleri topla!
           </p>
           <button
             onClick={startGame}
@@ -482,8 +442,7 @@ export default function App() {
         </div>
       )}
 
-      {/* Oyun Bitti Ekranı */}
-      {gameState === "GAMEOVER" && (
+      {gameState === 'GAMEOVER' && (
         <div
           onPointerDown={(e) => e.stopPropagation()}
           className="absolute inset-0 flex flex-col items-center justify-center bg-slate-950/75 backdrop-blur-md p-6 text-center"
@@ -491,24 +450,16 @@ export default function App() {
           <h2 className="text-4xl font-black text-orange-400 mb-2 tracking-wide">
             ÇARPIŞMA!
           </h2>
-          <p className="text-slate-400 text-sm mb-6">
-            Yörünge stabilitesi bozuldu
-          </p>
+          <p className="text-slate-400 text-sm mb-6">Yörünge stabilitesi bozuldu</p>
 
           <div className="grid grid-cols-2 gap-4 w-full max-w-xs mb-8">
             <div className="bg-slate-900/90 border border-cyan-500/30 p-4 rounded-2xl">
-              <div className="text-xs text-slate-400 uppercase font-bold mb-1">
-                SKOR
-              </div>
+              <div className="text-xs text-slate-400 uppercase font-bold mb-1">SKOR</div>
               <div className="text-3xl font-black text-cyan-400">{score}</div>
             </div>
             <div className="bg-slate-900/90 border border-yellow-500/30 p-4 rounded-2xl">
-              <div className="text-xs text-slate-400 uppercase font-bold mb-1">
-                EN İYİ
-              </div>
-              <div className="text-3xl font-black text-yellow-400">
-                {highScore}
-              </div>
+              <div className="text-xs text-slate-400 uppercase font-bold mb-1">EN İYİ</div>
+              <div className="text-3xl font-black text-yellow-400">{highScore}</div>
             </div>
           </div>
 

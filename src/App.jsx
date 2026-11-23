@@ -1,0 +1,463 @@
+import React, { useEffect, useRef, useState, useCallback } from 'react';
+import { Play, RotateCcw, Trophy, Volume2, VolumeX, Zap } from 'lucide-react';
+
+// Harici dosya gerektirmeyen sentezlenmiş ses efektleri
+const playSound = (type, muted) => {
+  if (muted) return;
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+
+    const now = ctx.currentTime;
+    if (type === 'switch') {
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(320, now);
+      osc.frequency.exponentialRampToValueAtTime(640, now + 0.08);
+      gain.gain.setValueAtTime(0.15, now);
+      gain.gain.exponentialRampToValueAtTime(0.01, now + 0.08);
+      osc.start(now);
+      osc.stop(now + 0.08);
+    } else if (type === 'score') {
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(580, now);
+      osc.frequency.exponentialRampToValueAtTime(980, now + 0.12);
+      gain.gain.setValueAtTime(0.2, now);
+      gain.gain.exponentialRampToValueAtTime(0.01, now + 0.12);
+      osc.start(now);
+      osc.stop(now + 0.12);
+    } else if (type === 'crash') {
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(160, now);
+      osc.frequency.exponentialRampToValueAtTime(40, now + 0.35);
+      gain.gain.setValueAtTime(0.3, now);
+      gain.gain.exponentialRampToValueAtTime(0.01, now + 0.35);
+      osc.start(now);
+      osc.stop(now + 0.35);
+    }
+  } catch (e) {
+    // Tarayıcı ses kısıtlaması durumunda sessiz devam et
+  }
+};
+
+export default function App() {
+  const canvasRef = useRef(null);
+  const [gameState, setGameState] = useState('START'); // START, PLAYING, GAMEOVER
+  const [score, setScore] = useState(0);
+  const [combo, setCombo] = useState(1);
+  const [highScore, setHighScore] = useState(() => {
+    return parseInt(localStorage.getItem('neon_orbit_highscore') || '0', 10);
+  });
+  const [muted, setMuted] = useState(false);
+
+  // Oyun içi anlık değişkenler (Render döngüsünü bozmamak için ref)
+  const gameRef = useRef({
+    angle: 0,
+    isOuter: true,
+    speed: 0.032,
+    obstacles: [],
+    orbs: [],
+    particles: [],
+    trail: [],
+    shake: 0,
+    score: 0,
+    combo: 1,
+    lastSpawnAngle: 0,
+    hueShift: 180,
+  });
+
+  const createParticles = (x, y, color, count = 14) => {
+    for (let i = 0; i < count; i++) {
+      const a = (Math.PI * 2 * i) / count + Math.random() * 0.5;
+      const v = 2 + Math.random() * 4.5;
+      gameRef.current.particles.push({
+        x,
+        y,
+        vx: Math.cos(a) * v,
+        vy: Math.sin(a) * v,
+        life: 1,
+        color,
+        size: 2 + Math.random() * 3,
+      });
+    }
+  };
+
+  const spawnEntities = (baseAngle) => {
+    const g = gameRef.current;
+    // Bir sonraki engelin açısı
+    const offset = 1.1 + Math.random() * 0.7;
+    const obsAngle = baseAngle + offset;
+    const obsOuter = Math.random() > 0.5;
+
+    g.obstacles.push({
+      angle: obsAngle,
+      isOuter: obsOuter,
+      passed: false,
+    });
+
+    // Engelin ters yörüngesine veya biraz ilerisine enerji küresi koy
+    if (Math.random() > 0.25) {
+      g.orbs.push({
+        angle: obsAngle + (Math.random() > 0.5 ? 0 : 0.35),
+        isOuter: !obsOuter,
+        collected: false,
+      });
+    }
+    g.lastSpawnAngle = obsAngle;
+  };
+
+  const startGame = useCallback(() => {
+    const g = gameRef.current;
+    g.angle = 0;
+    g.isOuter = true;
+    g.speed = 0.032;
+    g.obstacles = [];
+    g.orbs = [];
+    g.particles = [];
+    g.trail = [];
+    g.shake = 0;
+    g.score = 0;
+    g.combo = 1;
+    g.lastSpawnAngle = 0.8;
+
+    for (let i = 0; i < 4; i++) {
+      spawnEntities(g.lastSpawnAngle);
+    }
+
+    setScore(0);
+    setCombo(1);
+    setGameState('PLAYING');
+    playSound('switch', muted);
+  }, [muted]);
+
+  const handleTap = useCallback(() => {
+    if (gameState !== 'PLAYING') return;
+    gameRef.current.isOuter = !gameRef.current.isOuter;
+    playSound('switch', muted);
+  }, [gameState, muted]);
+
+  // Klavye desteği (Boşluk veya Yukarı/Aşağı ok)
+  useEffect(() => {
+    const onKeyDown = (e) => {
+      if (e.code === 'Space' || e.code === 'ArrowUp' || e.code === 'ArrowDown') {
+        e.preventDefault();
+        if (gameState === 'PLAYING') handleTap();
+        else startGame();
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [gameState, handleTap, startGame]);
+
+  // Ana Oyun Döngüsü (Canvas)
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext('2d');
+    let animId;
+
+    const resize = () => {
+      const dpr = window.devicePixelRatio || 1;
+      canvas.width = window.innerWidth * dpr;
+      canvas.height = window.innerHeight * dpr;
+      ctx.scale(dpr, dpr);
+    };
+    resize();
+    window.addEventListener('resize', resize);
+
+    const render = () => {
+      const w = window.innerWidth;
+      const h = window.innerHeight;
+      const cx = w / 2;
+      const cy = h / 2;
+      const minDim = Math.min(w, h);
+
+      const outerR = minDim * 0.34;
+      const innerR = minDim * 0.21;
+      const coreR = minDim * 0.08;
+
+      const g = gameRef.current;
+      g.hueShift = (g.hueShift + 0.2) % 360;
+
+      // Arka plan temizleme & Aurora parlama
+      ctx.fillStyle = '#050814';
+      ctx.fillRect(0, 0, w, h);
+
+      const bgGrad = ctx.createRadialGradient(cx, cy, 10, cx, cy, outerR * 1.6);
+      bgGrad.addColorStop(0, `hsla(${g.hueShift}, 85%, 20%, 0.35)`);
+      bgGrad.addColorStop(0.5, 'rgba(6, 182, 212, 0.08)');
+      bgGrad.addColorStop(1, 'rgba(5, 8, 20, 0)');
+      ctx.fillStyle = bgGrad;
+      ctx.fillRect(0, 0, w, h);
+
+      ctx.save();
+      if (g.shake > 0) {
+        ctx.translate((Math.random() - 0.5) * g.shake, (Math.random() - 0.5) * g.shake);
+        g.shake *= 0.88;
+        if (g.shake < 0.5) g.shake = 0;
+      }
+
+      // Yörünge halkalarını çiz
+      [outerR, innerR].forEach((r, idx) => {
+        ctx.beginPath();
+        ctx.arc(cx, cy, r, 0, Math.PI * 2);
+        ctx.strokeStyle = idx === 0 ? 'rgba(34, 211, 238, 0.25)' : 'rgba(250, 204, 21, 0.22)';
+        ctx.lineWidth = 2;
+        ctx.setLineDash([8, 8]);
+        ctx.stroke();
+        ctx.setLineDash([]);
+      });
+
+      // Merkez enerji çekirdeği
+      const coreGrad = ctx.createRadialGradient(cx, cy, 2, cx, cy, coreR);
+      coreGrad.addColorStop(0, '#fef08a');
+      coreGrad.addColorStop(0.5, '#06b6d4');
+      coreGrad.addColorStop(1, 'rgba(6, 182, 212, 0)');
+      ctx.beginPath();
+      ctx.arc(cx, cy, coreR, 0, Math.PI * 2);
+      ctx.fillStyle = coreGrad;
+      ctx.fill();
+
+      if (gameState === 'PLAYING') {
+        g.angle += g.speed;
+        // Hız kademeli olarak artar
+        g.speed = Math.min(0.068, 0.032 + g.score * 0.00025);
+
+        // Yeni engeller üret
+        while (g.lastSpawnAngle < g.angle + Math.PI * 2) {
+          spawnEntities(g.lastSpawnAngle);
+        }
+      }
+
+      const playerR = g.isOuter ? outerR : innerR;
+      const px = cx + Math.cos(g.angle) * playerR;
+      const py = cy + Math.sin(g.angle) * playerR;
+
+      // Oyuncu izi (Trail)
+      if (gameState === 'PLAYING') {
+        g.trail.push({ x: px, y: py });
+        if (g.trail.length > 14) g.trail.shift();
+      }
+      g.trail.forEach((pt, i) => {
+        const ratio = i / g.trail.length;
+        ctx.beginPath();
+        ctx.arc(pt.x, pt.y, ratio * 8, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(34, 211, 238, ${ratio * 0.45})`;
+        ctx.fill();
+      });
+
+      // Enerji Küreleri (Puan)
+      g.orbs.forEach((orb) => {
+        if (orb.collected) return;
+        const r = orb.isOuter ? outerR : innerR;
+        const ox = cx + Math.cos(orb.angle) * r;
+        const oy = cy + Math.sin(orb.angle) * r;
+
+        // Çizim
+        ctx.beginPath();
+        ctx.arc(ox, oy, 8, 0, Math.PI * 2);
+        ctx.fillStyle = '#facc15';
+        ctx.shadowColor = '#facc15';
+        ctx.shadowBlur = 14;
+        ctx.fill();
+        ctx.shadowBlur = 0;
+
+        // Toplama kontrolü
+        if (gameState === 'PLAYING') {
+          const dist = Math.hypot(px - ox, py - oy);
+          if (dist < 22) {
+            orb.collected = true;
+            g.combo = Math.min(5, g.combo + 1);
+            g.score += 10 * g.combo;
+            setScore(g.score);
+            setCombo(g.combo);
+            playSound('score', muted);
+            createParticles(ox, oy, '#facc15', 12);
+          }
+        }
+      });
+
+      // Engeller (Kırmızı/Turuncu Plazma Blokları)
+      g.obstacles.forEach((obs) => {
+        const r = obs.isOuter ? outerR : innerR;
+        const ex = cx + Math.cos(obs.angle) * r;
+        const ey = cy + Math.sin(obs.angle) * r;
+
+        ctx.save();
+        ctx.translate(ex, ey);
+        ctx.rotate(obs.angle);
+        ctx.fillStyle = '#fb923c';
+        ctx.shadowColor = '#f97316';
+        ctx.shadowBlur = 16;
+        ctx.beginPath();
+        ctx.roundRect(-9, -14, 18, 28, 6);
+        ctx.fill();
+        ctx.restore();
+
+        if (gameState === 'PLAYING') {
+          // Engeli başarıyla geçince +1 puan
+          if (!obs.passed && obs.angle < g.angle - 0.15) {
+            obs.passed = true;
+            g.score += 1;
+            setScore(g.score);
+          }
+
+          // Çarpışma kontrolü
+          const dist = Math.hypot(px - ex, py - ey);
+          if (dist < 19) {
+            g.shake = 18;
+            playSound('crash', muted);
+            createParticles(px, py, '#fb923c', 28);
+            setGameState('GAMEOVER');
+            setHighScore((prev) => {
+              const best = Math.max(prev, g.score);
+              localStorage.setItem('neon_orbit_highscore', best.toString());
+              return best;
+            });
+          }
+        }
+      });
+
+      // Eski nesneleri temizle
+      g.obstacles = g.obstacles.filter((o) => o.angle > g.angle - 1.5);
+      g.orbs = g.orbs.filter((o) => !o.collected && o.angle > g.angle - 1.5);
+
+      // Oyuncu Küresi
+      if (gameState !== 'GAMEOVER') {
+        ctx.beginPath();
+        ctx.arc(px, py, 11, 0, Math.PI * 2);
+        ctx.fillStyle = '#22d3ee';
+        ctx.shadowColor = '#22d3ee';
+        ctx.shadowBlur = 20;
+        ctx.fill();
+        ctx.shadowBlur = 0;
+
+        ctx.beginPath();
+        ctx.arc(px, py, 5, 0, Math.PI * 2);
+        ctx.fillStyle = '#ffffff';
+        ctx.fill();
+      }
+
+      // Parçacık efektleri
+      g.particles.forEach((p) => {
+        p.x += p.vx;
+        p.y += p.vy;
+        p.life -= 0.035;
+        if (p.life > 0) {
+          ctx.globalAlpha = p.life;
+          ctx.fillStyle = p.color;
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.globalAlpha = 1;
+        }
+      });
+      g.particles = g.particles.filter((p) => p.life > 0);
+
+      ctx.restore();
+      animId = requestAnimationFrame(render);
+    };
+
+    animId = requestAnimationFrame(render);
+    return () => {
+      cancelAnimationFrame(animId);
+      window.removeEventListener('resize', resize);
+    };
+  }, [gameState, muted]);
+
+  return (
+    <div
+      onPointerDown={handleTap}
+      className="relative w-full h-[100dvh] overflow-hidden cursor-pointer select-none"
+    >
+      <canvas ref={canvasRef} className="block w-full h-full" />
+
+      {/* Üst Bilgi Çubuğu */}
+      <div className="absolute top-0 left-0 right-0 p-5 flex items-center justify-between pointer-events-none">
+        <div className="flex items-center gap-2 bg-slate-900/70 backdrop-blur-md border border-cyan-500/30 px-4 py-2 rounded-2xl">
+          <Trophy className="w-5 h-5 text-yellow-400" />
+          <span className="text-yellow-300 font-bold text-lg">{highScore}</span>
+        </div>
+
+        {gameState === 'PLAYING' && (
+          <div className="flex flex-col items-center">
+            <span className="text-4xl font-black text-white tracking-wider drop-shadow-[0_0_12px_rgba(34,211,238,0.8)]">
+              {score}
+            </span>
+            {combo > 1 && (
+              <span className="text-xs font-extrabold text-yellow-400 bg-yellow-400/10 border border-yellow-400/40 px-2.5 py-0.5 rounded-full mt-1">
+                {combo}x KOMBO
+              </span>
+            )}
+          </div>
+        )}
+
+        <button
+          onPointerDown={(e) => {
+            e.stopPropagation();
+            setMuted(!muted);
+          }}
+          className="pointer-events-auto bg-slate-900/70 backdrop-blur-md border border-cyan-500/30 p-3 rounded-2xl text-cyan-300 active:scale-95 transition"
+        >
+          {muted ? <VolumeX className="w-5 h-5" /> : <Volume2 className="w-5 h-5" />}
+        </button>
+      </div>
+
+      {/* Başlangıç Ekranı */}
+      {gameState === 'START' && (
+        <div
+          onPointerDown={(e) => e.stopPropagation()}
+          className="absolute inset-0 flex flex-col items-center justify-center bg-slate-950/65 backdrop-blur-sm p-6 text-center"
+        >
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-cyan-500/15 border border-cyan-400/40 text-cyan-300 text-xs font-bold tracking-widest uppercase mb-4">
+            <Zap className="w-3.5 h-3.5 text-yellow-400" /> MCF GAMES • OYUN 1
+          </div>
+          <h1 className="text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 via-teal-300 to-yellow-300 mb-3 tracking-tight">
+            NEON ORBIT
+          </h1>
+          <p className="text-slate-300 max-w-xs text-sm mb-8 leading-relaxed">
+            Ekrana dokunarak iç ve dış yörünge arasında geçiş yap. Turuncu engellerden kaç, altın küreleri topla!
+          </p>
+          <button
+            onClick={startGame}
+            className="flex items-center gap-3 bg-gradient-to-r from-cyan-500 to-emerald-400 text-slate-950 font-black text-lg px-9 py-4 rounded-2xl shadow-[0_0_30px_rgba(34,211,238,0.5)] active:scale-95 transition cursor-pointer"
+          >
+            <Play className="w-6 h-6 fill-slate-950" /> OYUNA BAŞLA
+          </button>
+        </div>
+      )}
+
+      {/* Oyun Bitti Ekranı */}
+      {gameState === 'GAMEOVER' && (
+        <div
+          onPointerDown={(e) => e.stopPropagation()}
+          className="absolute inset-0 flex flex-col items-center justify-center bg-slate-950/75 backdrop-blur-md p-6 text-center"
+        >
+          <h2 className="text-4xl font-black text-orange-400 mb-2 tracking-wide">
+            ÇARPIŞMA!
+          </h2>
+          <p className="text-slate-400 text-sm mb-6">Yörünge stabilitesi bozuldu</p>
+
+          <div className="grid grid-cols-2 gap-4 w-full max-w-xs mb-8">
+            <div className="bg-slate-900/90 border border-cyan-500/30 p-4 rounded-2xl">
+              <div className="text-xs text-slate-400 uppercase font-bold mb-1">SKOR</div>
+              <div className="text-3xl font-black text-cyan-400">{score}</div>
+            </div>
+            <div className="bg-slate-900/90 border border-yellow-500/30 p-4 rounded-2xl">
+              <div className="text-xs text-slate-400 uppercase font-bold mb-1">EN İYİ</div>
+              <div className="text-3xl font-black text-yellow-400">{highScore}</div>
+            </div>
+          </div>
+
+          <button
+            onClick={startGame}
+            className="flex items-center gap-3 bg-gradient-to-r from-orange-500 to-yellow-400 text-slate-950 font-black text-lg px-9 py-4 rounded-2xl shadow-[0_0_30px_rgba(251,146,60,0.5)] active:scale-95 transition cursor-pointer"
+          >
+            <RotateCcw className="w-6 h-6" /> TEKRAR OYNA
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}

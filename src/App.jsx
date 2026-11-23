@@ -28,14 +28,49 @@ const playSound = (type, muted) => {
       gain.gain.exponentialRampToValueAtTime(0.01, now + 0.12);
       osc.start(now);
       osc.stop(now + 0.12);
-    } else if (type === 'crash') {
-      osc.type = 'sawtooth';
-      osc.frequency.setValueAtTime(160, now);
-      osc.frequency.exponentialRampToValueAtTime(40, now + 0.35);
-      gain.gain.setValueAtTime(0.3, now);
-      gain.gain.exponentialRampToValueAtTime(0.01, now + 0.35);
-      osc.start(now);
-      osc.stop(now + 0.35);
+ } else if (type === 'crash') {
+      // 1. Tok darbe / sub-bass düşüşü
+      const subOsc = ctx.createOscillator();
+      const subGain = ctx.createGain();
+      subOsc.connect(subGain);
+      subGain.connect(ctx.destination);
+
+      subOsc.type = 'triangle';
+      subOsc.frequency.setValueAtTime(190, now);
+      subOsc.frequency.exponentialRampToValueAtTime(34, now + 0.32);
+
+      subGain.gain.setValueAtTime(0.45, now);
+      subGain.gain.exponentialRampToValueAtTime(0.001, now + 0.34);
+
+      subOsc.start(now);
+      subOsc.stop(now + 0.35);
+
+      // 2. Kısa kıvılcım / kırılma gürültüsü (white noise burst)
+      const bufferSize = Math.floor(ctx.sampleRate * 0.22);
+      const noiseBuffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+      const output = noiseBuffer.getChannelData(0);
+      for (let i = 0; i < bufferSize; i++) {
+        output[i] = (Math.random() * 2 - 1) * Math.exp(-i / (bufferSize * 0.35));
+      }
+
+      const whiteNoise = ctx.createBufferSource();
+      whiteNoise.buffer = noiseBuffer;
+
+      const filter = ctx.createBiquadFilter();
+      filter.type = 'bandpass';
+      filter.frequency.setValueAtTime(950, now);
+      filter.Q.setValueAtTime(1.2, now);
+
+      const noiseGain = ctx.createGain();
+      noiseGain.gain.setValueAtTime(0.32, now);
+      noiseGain.gain.exponentialRampToValueAtTime(0.001, now + 0.22);
+
+      whiteNoise.connect(filter);
+      filter.connect(noiseGain);
+      noiseGain.connect(ctx.destination);
+
+      whiteNoise.start(now);
+      whiteNoise.stop(now + 0.22);
     }
   } catch (e) {
     // Tarayıcı ses kısıtlaması durumunda sessiz devam et
@@ -87,7 +122,7 @@ export default function App() {
   const spawnEntities = (baseAngle) => {
     const g = gameRef.current;
     // Bir sonraki engelin açısı
-    const offset = 1.1 + Math.random() * 0.7;
+    const offset = 1.35 + Math.random() * 0.75;
     const obsAngle = baseAngle + offset;
     const obsOuter = Math.random() > 0.5;
 
@@ -112,7 +147,7 @@ export default function App() {
     const g = gameRef.current;
     g.angle = 0;
     g.isOuter = true;
-    g.speed = 0.032;
+    g.speed = 0.021;
     g.obstacles = [];
     g.orbs = [];
     g.particles = [];
@@ -222,7 +257,7 @@ export default function App() {
       if (gameState === 'PLAYING') {
         g.angle += g.speed;
         // Hız kademeli olarak artar
-        g.speed = Math.min(0.068, 0.032 + g.score * 0.00025);
+        g.speed = Math.min(0.046, 0.021 + g.score * 0.00014);
 
         // Yeni engeller üret
         while (g.lastSpawnAngle < g.angle + Math.PI * 2) {

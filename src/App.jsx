@@ -99,7 +99,10 @@ export default function App() {
     lastSpawnAngle: 0,
     hueShift: 180,
   });
-
+  const targetR = g.isOuter ? outerR : innerR;
+  if (g.currentR === null) g.currentR = targetR;
+  g.currentR += (targetR - g.currentR) * 0.35;
+  const playerR = g.currentR;
   const createParticles = (x, y, color, count = 14) => {
     for (let i = 0; i < count; i++) {
       const a = (Math.PI * 2 * i) / count + Math.random() * 0.5;
@@ -118,8 +121,9 @@ export default function App() {
 
   const spawnEntities = (baseAngle) => {
     const g = gameRef.current;
-    const offset = 1.65 + Math.random() * 0.75;
-    const obsAngle = baseAngle + offset;
+    const minGap = 1.65;
+    const randomExtra = Math.random() * 0.75;
+    const obsAngle = Math.max(baseAngle + minGap, g.angle + 1.55) + randomExtra;
     const obsOuter = Math.random() > 0.5;
 
     g.obstacles.push({
@@ -128,9 +132,10 @@ export default function App() {
       passed: false,
     });
 
+    // Altın küreyi engelin hemen üstüne değil, güvenli bir açıyla koy
     if (Math.random() > 0.25) {
       g.orbs.push({
-        angle: obsAngle + (Math.random() > 0.5 ? 0 : 0.35),
+        angle: obsAngle + 0.45,
         isOuter: !obsOuter,
         collected: false,
       });
@@ -335,7 +340,7 @@ export default function App() {
           }
 
           const dist = Math.hypot(px - ex, py - ey);
-          if (dist < 19) {
+          if (dist < 14.5) {
             g.shake = 18;
             playSound("crash", muted);
             createParticles(px, py, "#fb923c", 28);

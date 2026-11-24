@@ -111,7 +111,7 @@ export default function App() {
     angle: 0,
     isOuter: true,
     currentR: null,
-    speed: 0.0055,
+    speed: 0.0115,
     obstacles: [],
     orbs: [],
     particles: [],
@@ -119,9 +119,9 @@ export default function App() {
     shake: 0,
     score: 0,
     combo: 1,
-    lastSpawnAngle: 1.6,
-    lastOuterAngle: 0.8,
-    lastInnerAngle: 0.8,
+    lastSpawnAngle: 1.4,
+    lastOuterAngle: 0.6,
+    lastInnerAngle: 0.6,
     hueShift: 180,
     lastFrameTime: null,
   });
@@ -144,22 +144,19 @@ export default function App() {
 
   const spawnEntities = (baseAngle) => {
     const g = gameRef.current;
-    const sameRingGap = 2.9;
-    const minOverallGap = 1.75;
+    const sameRingGap = 2.45;
+    const minOverallGap = 1.45;
 
-    // Önceki engelin ters yörüngesine öncelik ver; aynı yörüngeye düşerse geniş açı boşluğu bırak
     const lastObs = g.obstacles[g.obstacles.length - 1];
     let obsOuter = lastObs ? !lastObs.isOuter : Math.random() > 0.5;
-    if (Math.random() < 0.25) {
+    if (Math.random() < 0.3) {
       obsOuter = !obsOuter;
     }
 
     const ringLastAngle = obsOuter ? g.lastOuterAngle : g.lastInnerAngle;
-    const obsAngle = Math.max(
-      baseAngle + minOverallGap,
-      ringLastAngle + sameRingGap,
-      g.angle + 1.8
-    ) + Math.random() * 0.45;
+    const obsAngle =
+      Math.max(baseAngle + minOverallGap, ringLastAngle + sameRingGap, g.angle + 1.55) +
+      Math.random() * 0.4;
 
     g.obstacles.push({
       angle: obsAngle,
@@ -173,9 +170,9 @@ export default function App() {
       g.lastInnerAngle = obsAngle;
     }
 
-    if (Math.random() > 0.25) {
+    if (Math.random() > 0.2) {
       g.orbs.push({
-        angle: obsAngle + 0.65,
+        angle: obsAngle + 0.52,
         isOuter: !obsOuter,
         collected: false,
       });
@@ -189,7 +186,7 @@ export default function App() {
     g.angle = 0;
     g.isOuter = true;
     g.currentR = null;
-    g.speed = 0.0055;
+    g.speed = 0.0115;
     g.obstacles = [];
     g.orbs = [];
     g.particles = [];
@@ -197,9 +194,9 @@ export default function App() {
     g.shake = 0;
     g.score = 0;
     g.combo = 1;
-    g.lastSpawnAngle = 1.6;
-    g.lastOuterAngle = 0.8;
-    g.lastInnerAngle = 0.8;
+    g.lastSpawnAngle = 1.4;
+    g.lastOuterAngle = 0.6;
+    g.lastInnerAngle = 0.6;
     g.lastFrameTime = null;
 
     for (let i = 0; i < 4; i++) {
@@ -309,10 +306,9 @@ export default function App() {
       ctx.fill();
 
       if (currentState === 'PLAYING') {
-        // Skor sıçramalarından etkilenmeyen, dengeli ve yumuşak hız eğrisi
-        const effectiveProgress = Math.min(200, Math.max(0, g.score));
-        const targetSpeed = 0.0055 + Math.min(0.0145, effectiveProgress * 0.000072);
-        g.speed += (targetSpeed - g.speed) * Math.min(1, 0.06 * dt);
+        // Akıcı başlangıç (0.0115) + skora göre kademeli ve belirgin hızlanma (üst sınır: 0.0365)
+        const targetSpeed = 0.0115 + Math.min(0.025, Math.pow(Math.max(0, g.score), 0.78) * 0.00042);
+        g.speed += (targetSpeed - g.speed) * Math.min(1, 0.14 * dt);
         g.angle += g.speed * dt;
 
         while (g.lastSpawnAngle < g.angle + Math.PI * 2.5) {
@@ -322,7 +318,7 @@ export default function App() {
 
       const targetR = g.isOuter ? outerR : innerR;
       if (g.currentR === null) g.currentR = targetR;
-      g.currentR += (targetR - g.currentR) * Math.min(1, 0.55 * dt);
+      g.currentR += (targetR - g.currentR) * Math.min(1, 0.72 * dt);
       const playerR = g.currentR;
 
       const px = cx + Math.cos(g.angle) * playerR;
@@ -347,7 +343,7 @@ export default function App() {
         const oy = cy + Math.sin(orb.angle) * r;
 
         ctx.beginPath();
-        ctx.arc(ox, oy, 8, 0, Math.PI * 2);
+        ctx.arc(ox, oy, 9, 0, Math.PI * 2);
         ctx.fillStyle = '#facc15';
         ctx.shadowColor = '#facc15';
         ctx.shadowBlur = 14;
@@ -355,9 +351,8 @@ export default function App() {
         ctx.shadowBlur = 0;
 
         if (currentState === 'PLAYING') {
-          const sameRingForOrb = Math.abs(playerR - r) < 18;
-          const orbAngleDiff = Math.abs(orb.angle - g.angle);
-          if (sameRingForOrb && orbAngleDiff < 0.24) {
+          const dist = Math.hypot(px - ox, py - oy);
+          if (dist < 24) {
             orb.collected = true;
             g.combo = Math.min(5, g.combo + 1);
             g.score += 10 * g.combo;
@@ -392,9 +387,8 @@ export default function App() {
             setScore(g.score);
           }
 
-          const sameRing = Math.abs(playerR - r) < 12;
-          const angleDiff = Math.abs(obs.angle - g.angle);
-          if (sameRing && angleDiff < 0.16) {
+          const dist = Math.hypot(px - ex, py - ey);
+          if (dist < 17.5) {
             g.shake = 18;
             playSound('crash', isMuted);
             createParticles(px, py, '#fb923c', 28);

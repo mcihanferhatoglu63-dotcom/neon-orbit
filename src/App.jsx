@@ -119,7 +119,7 @@ export default function App() {
     shake: 0,
     score: 0,
     combo: 1,
-    lastSpawnAngle: 1.4,
+    lastSpawnAngle: 1.6,
     hueShift: 180,
   });
 
@@ -141,9 +141,9 @@ export default function App() {
 
   const spawnEntities = (baseAngle) => {
     const g = gameRef.current;
-    const minGap = 1.65;
-    const randomExtra = Math.random() * 0.75;
-    const obsAngle = Math.max(baseAngle + minGap, g.angle + 1.55) + randomExtra;
+    const minGap = 2.05;
+    const randomExtra = Math.random() * 0.65;
+    const obsAngle = Math.max(baseAngle + minGap, g.angle + 1.85) + randomExtra;
     const obsOuter = Math.random() > 0.5;
 
     g.obstacles.push({
@@ -154,7 +154,7 @@ export default function App() {
 
     if (Math.random() > 0.25) {
       g.orbs.push({
-        angle: obsAngle + 0.45,
+        angle: obsAngle + 0.55,
         isOuter: !obsOuter,
         collected: false,
       });
@@ -175,7 +175,7 @@ export default function App() {
     g.shake = 0;
     g.score = 0;
     g.combo = 1;
-    g.lastSpawnAngle = 1.4;
+    g.lastSpawnAngle = 1.6;
 
     for (let i = 0; i < 4; i++) {
       spawnEntities(g.lastSpawnAngle);
@@ -290,7 +290,7 @@ export default function App() {
 
       const targetR = g.isOuter ? outerR : innerR;
       if (g.currentR === null) g.currentR = targetR;
-      g.currentR += (targetR - g.currentR) * 0.35;
+      g.currentR += (targetR - g.currentR) * 0.55;
       const playerR = g.currentR;
 
       const px = cx + Math.cos(g.angle) * playerR;
@@ -323,8 +323,9 @@ export default function App() {
         ctx.shadowBlur = 0;
 
         if (currentState === 'PLAYING') {
-          const dist = Math.hypot(px - ox, py - oy);
-          if (dist < 22) {
+          const sameRingForOrb = Math.abs(playerR - r) < 18;
+          const orbAngleDiff = Math.abs(orb.angle - g.angle);
+          if (sameRingForOrb && orbAngleDiff < 0.24) {
             orb.collected = true;
             g.combo = Math.min(5, g.combo + 1);
             g.score += 10 * g.combo;
@@ -359,8 +360,9 @@ export default function App() {
             setScore(g.score);
           }
 
-          const dist = Math.hypot(px - ex, py - ey);
-          if (dist < 14.5) {
+          const sameRing = Math.abs(playerR - r) < 12;
+          const angleDiff = Math.abs(obs.angle - g.angle);
+          if (sameRing && angleDiff < 0.16) {
             g.shake = 18;
             playSound('crash', isMuted);
             createParticles(px, py, '#fb923c', 28);

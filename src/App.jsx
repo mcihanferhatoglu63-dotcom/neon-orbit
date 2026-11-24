@@ -120,7 +120,10 @@ export default function App() {
     score: 0,
     combo: 1,
     lastSpawnAngle: 1.6,
+    lastOuterAngle: 0.8,
+    lastInnerAngle: 0.8,
     hueShift: 180,
+    lastFrameTime: null,
   });
 
   const createParticles = (x, y, color, count = 14) => {
@@ -141,10 +144,22 @@ export default function App() {
 
   const spawnEntities = (baseAngle) => {
     const g = gameRef.current;
-    const minGap = 2.05;
-    const randomExtra = Math.random() * 0.65;
-    const obsAngle = Math.max(baseAngle + minGap, g.angle + 1.85) + randomExtra;
-    const obsOuter = Math.random() > 0.5;
+    const sameRingGap = 2.9;
+    const minOverallGap = 1.75;
+
+    // Önceki engelin ters yörüngesine öncelik ver; aynı yörüngeye düşerse geniş açı boşluğu bırak
+    const lastObs = g.obstacles[g.obstacles.length - 1];
+    let obsOuter = lastObs ? !lastObs.isOuter : Math.random() > 0.5;
+    if (Math.random() < 0.25) {
+      obsOuter = !obsOuter;
+    }
+
+    const ringLastAngle = obsOuter ? g.lastOuterAngle : g.lastInnerAngle;
+    const obsAngle = Math.max(
+      baseAngle + minOverallGap,
+      ringLastAngle + sameRingGap,
+      g.angle + 1.8
+    ) + Math.random() * 0.45;
 
     g.obstacles.push({
       angle: obsAngle,
@@ -152,13 +167,20 @@ export default function App() {
       passed: false,
     });
 
+    if (obsOuter) {
+      g.lastOuterAngle = obsAngle;
+    } else {
+      g.lastInnerAngle = obsAngle;
+    }
+
     if (Math.random() > 0.25) {
       g.orbs.push({
-        angle: obsAngle + 0.55,
+        angle: obsAngle + 0.65,
         isOuter: !obsOuter,
         collected: false,
       });
     }
+
     g.lastSpawnAngle = obsAngle;
   };
 
@@ -176,6 +198,9 @@ export default function App() {
     g.score = 0;
     g.combo = 1;
     g.lastSpawnAngle = 1.6;
+    g.lastOuterAngle = 0.8;
+    g.lastInnerAngle = 0.8;
+    g.lastFrameTime = null;
 
     for (let i = 0; i < 4; i++) {
       spawnEntities(g.lastSpawnAngle);
@@ -225,7 +250,13 @@ export default function App() {
     resize();
     window.addEventListener('resize', resize);
 
-    const render = () => {
+    const render = (now = performance.now()) => {
+      const g = gameRef.current;
+      if (g.lastFrameTime === null) g.lastFrameTime = now;
+      const rawDt = (now - g.lastFrameTime) / (1000 / 60);
+      g.lastFrameTime = now;
+      const dt = Math.min(2.5, Math.max(0.25, rawDt));
+
       const w = window.innerWidth;
       const h = window.innerHeight;
       const cx = w / 2;
@@ -236,11 +267,10 @@ export default function App() {
       const innerR = minDim * 0.21;
       const coreR = minDim * 0.08;
 
-      const g = gameRef.current;
       const currentState = gameStateRef.current;
       const isMuted = mutedRef.current;
 
-      g.hueShift = (g.hueShift + 0.2) % 360;
+      g.hueShift = (g.hueShift + 0.2 * dt) % 360;
 
       ctx.fillStyle = '#050814';
       ctx.fillRect(0, 0, w, h);
@@ -255,7 +285,7 @@ export default function App() {
       ctx.save();
       if (g.shake > 0) {
         ctx.translate((Math.random() - 0.5) * g.shake, (Math.random() - 0.5) * g.shake);
-        g.shake *= 0.88;
+        g.shake *= Math.pow(0.88, dt);
         if (g.shake < 0.5) g.shake = 0;
       }
 
@@ -279,18 +309,20 @@ export default function App() {
       ctx.fill();
 
       if (currentState === 'PLAYING') {
-        const dynamicSpeed = 0.0055 + Math.min(0.0185, Math.pow(Math.max(0, g.score), 0.75) * 0.00022);
-        g.speed = dynamicSpeed;
-        g.angle += g.speed;
+        // Skor sıçramalarından etkilenmeyen, dengeli ve yumuşak hız eğrisi
+        const effectiveProgress = Math.min(200, Math.max(0, g.score));
+        const targetSpeed = 0.0055 + Math.min(0.0145, effectiveProgress * 0.000072);
+        g.speed += (targetSpeed - g.speed) * Math.min(1, 0.06 * dt);
+        g.angle += g.speed * dt;
 
-        while (g.lastSpawnAngle < g.angle + Math.PI * 2) {
+        while (g.lastSpawnAngle < g.angle + Math.PI * 2.5) {
           spawnEntities(g.lastSpawnAngle);
         }
       }
 
       const targetR = g.isOuter ? outerR : innerR;
       if (g.currentR === null) g.currentR = targetR;
-      g.currentR += (targetR - g.currentR) * 0.55;
+      g.currentR += (targetR - g.currentR) * Math.min(1, 0.55 * dt);
       const playerR = g.currentR;
 
       const px = cx + Math.cos(g.angle) * playerR;
@@ -400,9 +432,9 @@ export default function App() {
       }
 
       g.particles.forEach((p) => {
-        p.x += p.vx;
-        p.y += p.vy;
-        p.life -= 0.035;
+        p.x += p.vx * dt;
+        p.y += p.vy * dt;
+        p.life -= 0.035 * dt;
         if (p.life > 0) {
           ctx.globalAlpha = Math.max(0, p.life);
           ctx.fillStyle = p.color;
